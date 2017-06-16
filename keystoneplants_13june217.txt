@@ -1,0 +1,81 @@
+IDENTIFYING KEYSTONE PLANTS FOR CONSERVATION USING LEPIDOPTERA HOST PLANT DATA
+
+INTRODUCTION
+1. Conserving interactions vs species diversity
+a. Efficient allocation of resources
+b. The current paradigm in conservation biology is of a 'crisis-approach', to conserve single species of which emmeninent extinction or extirpation is possible.  New shifts in thinking suggest in order to achieve conservation and restoration goals, we need to instead prioritize interactions and ecosystem services (Harvey et al 20XX). 
+2. Plant-caterpillar interactions/specialization	
+	a.	why is this a good model?
+b. host plant loss is the driver of regional extinctions in lepidoptera (Pearse and Altermatt 2013)
+c. Invasive/non-native plants are a potential cause of species declines
+d. Herbivorous insects are highly specialized on host plants
+e. Insects provide support for a larger consumer food web including insectivorous birds
+f. Plant communities can be manipulated by managers of public and private land. 
+g. complete, and meaningful interaction networks are rare and difficult to acquire (Morales-Castilla et al 2015) 
+
+3. How to identify a keystone species
+	a.	using network analysis
+In conservation biology, a keystone species is one that supports may other species, and its removal would have the strongest  cascading effects to the system. Harvey et al 2016 suggest that a keystone species would also have the "strongest impact on community stability following their removel". They go on to say that the advantage of using a keystone concept is that it gives a quantifiable metric for which species to prioritize. 
+
+When quantifying network structure, one goal is to conserve the stability of the system. Stability increases  with the diversity of links and the eveneess of links across nodes increases. This is markedly different from random interactions as randomness causes increased instability in networks (Tang et al 2014. 
+
+Number of interactions (connectance) is important, such that plant species that support highly specialized herbivores (feeding on 1 or a few host plants) are especially vulnerable to extinction (Harvey et al 20XX). 
+
+
+4. Objectives
+a. What are the keystone plants for plant-caterpillar networks?
+b. Is this relationship consistent across bioregions, latitude, diversity?
+c. Does prioritizing keystone plants improve conservation efforts?
+       The objective of this study is to determine which plants are keystone genera based on the community of Lepidoptera they support. To do this, we used a binary matrix of host plant-Lepidoptera records from XX counties across the United States. We tested whether the resiliency of the network varied with latitude, bioregion, plant diversity and Lepidoptera diversity. Finally, we bootstrapped estimates of community integrity by simulating restoration planting decisions, and the subsequent caterpillars supported using decisions informed and uninformed by keystone plants.  
+
+METHODS
+	Lepidoptera-Host Plant Data. Describe Dataset
+This study includes data from XXXX different lepidoptera species and XXX plant genera from across the United States. We acquired host plant data from XXXX to compose a state-specific dataset of XXXX different host plant-lepidoptera interactions. 
+	Distribution analysis. We looked at the keystone species for each county and assessed whether keystone plants differed across 1) latitude, 2) bioregion, 3) plant diversity and 4) caterpillar diversity. We also assessed whether the distribution of interactions varied across these metrics given a pareto distribution (foreiester et al).
+	Network Analysis. To determine conservation targets, we identified keystone plant species (Paine 19XX) using methods from Harvey et al 2016. This method consists of two steps to identify target species. To perform this analysis, we used an extensive host-plant database (from Tallamy and shropshire XXXX) of caterpillar-plant interactions. Ecological networks are ideal to determine cascading extinction rates of specialists following host plant loss (Pearse and Altermatt, 2016). We extended the plant-caterpillar database by using additional data from XX counties in the united states (see supplemental material for additional information regarding acquisition of county data). On a per-county basis, we used a network-based approach to assess network structure. We used a binary matrix where each record of a caterpillar on a host plant indicates the exisitance of an interaction. The results given from a binary interaction network  is correlated with those from a network weighted by abundance (Coroso et al 2015)
+	We first ranked pairwise interactions based on the effect of that plant on network structural stability for each county. 
+	Extinction Sensitivity.  We also determined the 'extinction sensitivity' of each plant; in other words, how many lepidoptera species are at risk of extirpation with the loss of a host plant.  In our context, sensitivity means “specialization”, caterpillars that use only one genus of plant are considered especially sensitive to the removal of that plant. We modified the "nb.extinct" function from Suave et al 2016 so that we could calculate the number of extinct herbivores following the removal of a plant. This function was repeated for each county to acquire the SE of sensitivity  and report the plant genera that support the most sensitive species. 
+	This scenario only considers the direct impact of host plant loss on lepidoptera extinction, however indirect loss via XXXXXXXXX. Conservation status of individual caterpillars was not used, but could be incorporated into models for managers. This approach allows us to identify which plants were the most important to conserve for conservation for each county. 
+	 
+	Simulation. Finally, to determine the applicability of our results, we simulated the management actions of a restoration effort that a) includes keystone plants, b) excludes keystone plants and c)randomly chooses plants. To do this, we looked at the caterpillar species diversity (excluding duplicate species) given the three scenarios of choosing 10 plant species for restoration efforts. We bootstrapped these scenarios 5000 iterations to get a confidence interval for the caterpillar species that are conserved in these efforts. We compared the degree of overlap among the confidence intervals of these models.
+
+RESULTS
+DISCUSSION
+1. Summary of results
+2. Keystone Plants and trophic ‘upscades’
+3. Improving efficiency of conservation efforts
+4. Caterpillar conservation for consumer conservatiojn
+a. Abundance correlated with diversity
+b. Food resources for consumers
+i. Birds, spiders, ad libetum
+5. Novel ecosystems
+6. Future Work
+
+REFERENCES
+1. **http://onlinelibrary.wiley.com.udel.idm.oclc.org/doi/10.1111/oik.01613/full
+* Good paper for how to analyze the network
+
+2. A network model for plant–pollinator community assembly
+* http://www.pnas.org/content/108/1/197.full.pdf
+
+3. Review: Ecological networks – beyond food webs
+* http://onlinelibrary.wiley.com/doi/10.1111/j.1365-2656.2008.01460.x/full
+
+4. Topological keystone species complexes in ecological interaction networks
+* 	http://www.jstor.org/stable/24113356?seq=1#page_scan_tab_contents
+
+5. Altermatt, F., and I. S. Pearse. 2011. Similarity and specialization of the larval versus adult diet of European butterflies and moths. American Naturalist 178: 372–382.
+
+6. Altermatt, F., and I. S. Pearse. 2013. Extinction cascades partially estimate herbivore losses in a complete Lepidoptera–plant food web
+* extinctions based on a simulation of host plant loss explains observed extinctions. 
+
+7. Binary versus weighted interaction networks Gilberto Corso. et al 2015
+* results from binary networks are highly correlated with weighted networks
+8. Predicting novel trophic interactions in a non-native world
+Identifying keystone species
+9. Bridging ecology and conservation: from ecological networks to ecosystem function
+10. A method for identifying keystone species in food web models
+11. Identifying Keystone Species in the Human Gut Microbiome from Metagenomic Timeseries Using Sparse Linear Regression
+12. http://www.devotes-project.eu/wp-content/uploads/2014/07/DEVOTES-D6-1-Keystones.pdf
+
+
