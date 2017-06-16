@@ -1,0 +1,94 @@
+---
+title: "simulation"
+author: "Desiree Narango"
+date: "June 5, 2017"
+output: html_document
+---
+<img src="C:/Users/dnarango/Desktop/picture/dowdy.jpg"alt="Alt text" style="width: 200px;"/>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+##For montana
+
+#libraries
+library(stringr)
+library(tidyr)
+library(dplyr)
+
+
+## All montana plants for each county
+mt_plants<-read.csv("C:/Users/dnarango/Desktop/Kimberley LEPS/montana_plants.csv", na.strings=".") %>%
+  transform(MT_counties=str_split(MT_counties, ",")) %>%
+    unnest(MT_counties)
+
+##All montana leps for Jefferson county
+### Need to determine how to treat the weird genera
+mt_leps<-read.csv("C:/Users/dnarango/Desktop/Kimberley LEPS/jeffersonMT_leps.csv", na.strings=c("", "NA",".")) %>%
+  select(family,species,polyphagous,plant_host_genera,exotic) %>%
+  transform(plant_host_genera=str_split(plant_host_genera," ")) %>%
+    unnest(plant_host_genera) %>%
+    filter(nchar(plant_host_genera)>1) %>%
+    group_by(family, species, polyphagous ,exotic, plant_host_genera) %>%
+    summarise(total=n()) %>%
+    mutate(count=1)
+
+
+##Convert to wide format for network analysis
+network_lep<-mt_leps %>% 
+  ungroup()%>%
+  select(-polyphagous, -total, -family, -exotic)%>%
+  select(plant_host_genera, species, count) %>%
+  rename(consumer=species) %>%
+  rename(resource=plant_host_genera) 
+
+```
+
+Now that we have the plant list and lep host plant list we need to pull random plants and determine caterpillars
+
+```{r}
+jefferson_plants<-mt_plants %>%
+  filter(MT_counties==" Jefferson") %>%
+  .$genera %>%
+  tolower()
+
+
+##Data
+county_plant<-jefferson_plants
+county_lep<-network_lep
+iteration = 100  # number of iteration for random parameterization of interaction strengths (the higher the more accurate the final ranking of interactions)
+iter_array = numeric(iteration) # array to record community stability index for each random parameterization
+move_seed = 42 # arbitrary integrer
+
+##Function to perform simulation
+## Runs an uninformed simulation of leps conserved
+simulation<-function (x, y, z){
+  plant=x
+  lep=y
+  random_plant=sample(plant, z)
+  lep_community=lep%>%filter(grepl(paste(random_plant, collapse="|"), resource))
+  diversity=length(unique(lep_community$consumer))
+}
+
+
+ptm <- proc.time()
+#... Loop for random parameterizations of interaction strength
+
+for(i in 1:nbiter) {
+  set.seed(i+move_seed) #... Set a new (known) seed
+  
+  iter_array[i] = simulation(county_plant,county_lep,25)
+}
+
+proc.time() - ptm
+
+plot(density(iter_array))
+dens<-ggplot(iter_array, aes(x=values)) + geom_density()
+
+```
+Now make informed choices
+1) Only native plants
+
+2) Native plants with keystone plants
