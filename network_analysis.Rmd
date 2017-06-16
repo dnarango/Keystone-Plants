@@ -20,6 +20,7 @@ Then you need to calculate stability with plants removed
 First I need to important the interaction network for a county. Here we use a simple 0,1 network of host plant use
 
 ```{r}
+rm(list = ls())
 ##For montana
 
 #libraries
@@ -27,32 +28,42 @@ library(stringr)
 library(tidyr)
 library(dplyr)
 
-
 ## All montana plants for each county
-mt_plants<-read.csv("C:/Users/dnarango/Desktop/Kimberley LEPS/montana_plants.csv", na.strings=".") %>%
+mt_plants<-read.csv("C:/Users/MTHallworth/Documents/DESIREE/NETWORK ANALYSIS/montana_plants.csv", na.strings=".") %>%
   transform(MT_counties=str_split(MT_counties, ",")) %>%
-    unnest(MT_counties)
+    unnest(MT_counties) %>%
+    mutate(MT_counties=str_replace(MT_counties," ","")) %>%
+    mutate(plant_host_genera=tolower(genera))
+
+jefferson_plants<-mt_plants %>%
+    filter(MT_counties=="Jefferson") %>%   ## Pull out Jefferson
+    select(plant_host_genera, type)
+
 
 ##All montana leps for Jefferson county
 ### Need to determine how to treat the weird genera
-mt_leps<-read.csv("C:/Users/dnarango/Desktop/Kimberley LEPS/jeffersonMT_leps.csv", na.strings=c("", "NA",".")) %>%
+mt_leps<-read.csv("C:/Users/MTHallworth/Documents/DESIREE/NETWORK ANALYSIS/jeffersonMT_leps.csv", na.strings=c("", "NA",".")) %>%
   select(family,species,polyphagous,plant_host_genera,exotic) %>%
   transform(plant_host_genera=str_split(plant_host_genera," ")) %>%
     unnest(plant_host_genera) %>%
     filter(nchar(plant_host_genera)>1) %>%
     group_by(family, species, polyphagous ,exotic, plant_host_genera) %>%
     summarise(total=n()) %>%
-    mutate(count=1)
+    mutate(count=1) 
 
-lep<-mt_leps %>%group_by(species)%>%summarise(n()) %>%select(species)%>% mutate(consumer=species, count=0) %>%rename(resource=species)
+jefferson_leps<-mt_leps%>%
+    left_join(jefferson_plants, by="plant_host_genera") %>%
+      filter(type=="woody")
 
-plant<-mt_leps %>%group_by(plant_host_genera)%>%summarise(n()) %>%rename(species=plant_host_genera) %>% select(species)%>%mutate(consumer=species, count=0)%>%rename(resource=species)
+lep<-jefferson_leps %>%group_by(species)%>%summarise(n()) %>%select(species)%>% mutate(consumer=species, count=0) %>%rename(resource=species)
+
+plant<-jefferson_leps %>%group_by(plant_host_genera)%>%summarise(n()) %>%rename(species=plant_host_genera) %>% select(species)%>%mutate(consumer=species, count=0)%>%rename(resource=species)
 
 toadd<-rbind(plant, lep)
 
 
 ##Convert to wide format for network analysis
-network_lep<-mt_leps %>% 
+network_lep<-jefferson_leps %>% 
   ungroup()%>%
   select(-polyphagous, -total, -family, -exotic)%>%
   select(plant_host_genera, species, count) %>%
@@ -67,7 +78,7 @@ network_lep2<-network_lep %>%
   rbind(toadd) %>%
   rbind(toadd2) %>%
   spread(consumer, count, fill=0) %>%
-  gather(consumer,value, 2:2414) %>%
+  gather(consumer,value, 2:ncol(.)) %>%
   #arrange(resource) %>%
   spread(consumer, value) 
 
@@ -77,6 +88,8 @@ rownames(network_lep2)<-network_lep2$resource
 network_lep3<-network_lep2 %>%
   select(-resource) %>%
   t()
+
+
 
 ```
 Script: code to rank interactions in an ecological network by their impact on structural stability
@@ -101,11 +114,11 @@ Analysis steps:
 Step 1: Calculate the change in structural stability with the removal of each interaction separately
 Step 2: Calculate the number of extinctions following the removal of each interaction separately
 
-
+#cALCULATE STRUCTURAL STABILITY
 ```{r}
 #... Load the stability functions (Online Supplementary material of Sauve et al. 2016 Ecology)
 #................................
-source("C:/Users/dnarango/Documents/Manuscripts/keystone plants/network analysis/suave_functions.R")
+source("C:/Users/MTHallworth/Documents/DESIREE/NETWORK ANALYSIS/suave_functions.R")
 
 
 #... Load data
@@ -116,12 +129,17 @@ source("C:/Users/dnarango/Documents/Manuscripts/keystone plants/network analysis
 # directected interactions (such as antagonistic ones) are such that m_ij = 1 and m_ji = 0 if i feeds on j (j -> i)
 # i are the rows, with species in their role of consumer in antagonistic interactions
 # j are the columns, with species in their role of resource in antagonistic interactions
-m = as.matrix(read.csv("C:/Users/dnarango/Documents/Manuscripts/keystone plants/network analysis/test data/adjacency_matrix_foodweb.csv",h=T, row.names=1, sep=";"))
-s = nrow(m) # the number of species
+## m = as.matrix(read.csv("C:/Users/MTHallworth/Documents/DESIREE/NETWORK ANALYSIS/TEST/adjacency_matrix_foodweb.csv",h=T, row.names=1, sep=";"))
+## s = nrow(m) # the number of species
 
 #### MY DATA
 HOSTPLANTS<-as.matrix(network_lep3)
-SPECIES=nrow(network_lep2)
+SPECIES=nrow(HOSTPLANTS)
+
+
+### My Test Data
+## M = as.matrix(read.csv("C:/Users/MTHallworth/Documents/DESIREE/NETWORK ANALYSIS/TEST/adjacency_matrix_foodweb_plants.csv",h=T, row.names=1, sep=";"))
+## S = nrow(M) # the number of species
 ```
 
 Setting up the matrix, functions etc.
@@ -130,16 +148,21 @@ Setting up the matrix, functions etc.
 # this is necessary to calculate robustess and secondary extinctions following removal of interactions
 # b is a array representing species in the same order than in the adjacency matrix
 # 1 is for basal species (persist without any resource), 0 for consumer (need an interaction with a resource to persist)   
-b = t(as.matrix(read.csv("C:/Users/dnarango/Documents/Manuscripts/keystone plants/network analysis/test data/basal_species_foodweb.csv",h=F, row.names=1, sep=";")))
+## b = t(as.matrix(read.csv("C:/Users/MTHallworth/Documents/DESIREE/NETWORK ANALYSIS/TEST/basal_species_foodweb.csv",h=F, row.names=1, sep=";")))
 
 
 ##Mydata
 ##all plants are primary producers
-BASAL<-c(rep(0,nrow(lep)),rep(1,nrow(plant)))
+##this specifies every record that doesn't have " " as a plant
+BASAL<-t(as.matrix((!grepl(" ",network_lep2$resource))*1))
+colnames(BASAL)<-network_lep2$resource
+
+##My Test Data
+## B = t(as.matrix(read.csv("C:/Users/MTHallworth/Documents/DESIREE/NETWORK ANALYSIS/TEST/basal_species_foodweb_plants.csv",h=F, row.names=1, sep=";")))
 
 #... Variable to initiate the seeds (arbitrary positive integer)
 #..................................
-move_seed = 13000
+move_seed = 42
 
 
 #... Define the Interaction links
@@ -157,7 +180,6 @@ get_coordinates <-function(x){
 }
 
 #... names of the links
-# (PUT IN MATRIX HERE)
 names.links = as.character(links)
 for(i in 1:length(links)) names.links [i] = paste(rownames(HOSTPLANTS)[get_coordinates(links[i])[1]],"->",colnames(HOSTPLANTS)[get_coordinates(links[i])[2]],sep="")
 
@@ -172,7 +194,7 @@ rownames(links_ij) = names.links
 ```{r}
 # the seed is set in order to keep the same set of interaction strength parameterization for each interaction removal
 # when only one interaction strength is changed
-nbiter = 10000  # number of iteration for random parameterization of interaction strengths (the higher the more accurate the final ranking of interactions)
+nbiter = 30  # number of iteration for random parameterization of interaction strengths (the higher the more accurate the final ranking of interactions)
 stab = numeric(nbiter) # array to record community stability index for each random parameterization
 
 ptm <- proc.time()
@@ -199,36 +221,98 @@ stab_init = median(stab)
 stab_init
 
 proc.time() - ptm
+
+## 3.22 hours for 1000 iterations
+## 1000 iterations=0.006
+stab_init<-0.006
 ```
 
 #... Sequential interaction removal and effect on structural stability
 Now let's removes stuff and see what happens
 ```{r}
-delta_stab <-numeric(length(links)) # array to record change in stability when an interaction is removed
+
+
+plantlist<-(!grepl(" ", network_lep2$resource)*1) ## A character vector with plant names
+plantnames<-network_lep2$resource[!grepl(" ", network_lep2$resource)]
+
+delta_stab <-numeric(length(plantnames)) # array to record change in stability when an interaction is removed
+
+nbiter=60
 
 ptm <- proc.time() # start clock
 #... Loop for link removals
 #..........................
-for (j in 1:length(links)){
-  m2 = m
-  m2 [links_ij[j,1],links_ij[j,2]] = 0
-  stab_changed = numeric(nbiter) # array to record community stability indices when 1 interaction is removed
-  for(i in 1:nbiter)
-  {
-    set.seed(i+move_seed) # Set the same seeds as for initial stability calculation
-    J2 <- jacobian_binary(m=m2) # Parameterize the interaction strengths
-    stab_changed[i] <- stability(J2,1) # Calculate the community stability index
+
+
+for (j in 1:length(plantnames)){    ### Loop through the plant list
+  plant= plantnames[j]              ## designate what plant
+  
+  m2 = HOSTPLANTS                          ## new matrix
+  
+  for (k in 1:length(links)){                                    ## loop through the links
+     if  (grepl(plant,rownames(links_ij)[k]) )                 ## If the row name has the plant....
+          m2 [links_ij[k,1],links_ij[k,2]] = 0                  ## Make all those links = 0
   }
-  
-  #... change in average stability
-  # Percent of change compared to initial stability
-  # Negative numbers mean that stability decreases
-  
-  delta_stab[j] <- ((stab_init - median(stab_changed))/stab_init*100)
+     stab_changed = numeric(nbiter)                     ## array to record community stability indices when 1 interaction is removed
+
+  for(m in 1:nbiter) {                              ## loop through the iterations
+	
+	  set.seed(i+move_seed) # Set the same seeds as for initial stability calculation
+	  J2 <- jacobian_binary(m=m2) # Parameterize the interaction strengths
+	  stab_changed[m] <- stability(J2,1) # Calculate the community stability index
+	}
+	
+	#... change in average stability
+	  # Percent of change compared to initial stability
+    # Negative numbers mean that stability decreases
+	delta_stab[j] <- ((stab_init - median(stab_changed))/stab_init*100)
 }
 
-
+  
 proc.time() - ptm # Stop the clock
+  
+
+#... Rank the interactions depending on stability change
+#.......................................................
+names(delta_stab) <- plantnames
+delta_stab_sorted <- sort(delta_stab,decreasing = T)
+
+
+#... Plot the stability change against ranked interactions
+#.........................................................
+colos = rainbow(length(plantnames),start=0,end=0.35) # colors of the points: red (stability loss) to green (stability gain)
+#pdf("Structural_stability_changes_seed13000_nbiter10000.pdf")
+plot(1:length(plantnames),rev(delta_stab_sorted),xlab = "Plants",ylab="% Change in structural stability",xaxt="n",pch=19,col=colos)
+axis(1,at=1:length(plantnames),labels=rev(names(delta_stab_sorted)),las=2,cex.axis=0.8)
+abline(h=0,lty=3)
+#dev.off()
+```
+# Alternate step 1
+
+```{r}
+nbiter=10
+#... Sequential interaction removal and effect on structural stability
+#.....................................................................
+delta_stab <-numeric(length(links)) # array to record change in stability when an interaction is removed
+
+#... Loop for link removals
+#..........................
+for (j in 1:length(links)){
+	m2 = HOSTPLANTS
+  m2 [links_ij[j,1],links_ij[j,2]] = 0
+	stab_changed = numeric(nbiter) # array to record community stability indices when 1 interaction is removed
+	for(i in 1:nbiter)
+	{
+	  set.seed(i+move_seed) # Set the same seeds as for initial stability calculation
+	  J2 <- jacobian_binary(m=m2) # Parameterize the interaction strengths
+	  stab_changed[i] <- stability(J2,1) # Calculate the community stability index
+	}
+	
+	#... change in average stability
+	  # Percent of change compared to initial stability
+    # Negative numbers mean that stability decreases
+	delta_stab[j] <- ((stab_init - median(stab_changed))/stab_init*100)
+}
 
 
 #... Rank the interactions depending on stability change
@@ -241,21 +325,15 @@ delta_stab_sorted <- sort(delta_stab,decreasing = T)
 #.........................................................
 colos = rainbow(length(links),start=0,end=0.35) # colors of the points: red (stability loss) to green (stability gain)
 pdf("Structural_stability_changes_seed13000_nbiter10000.pdf")
-plot(1:length(links),delta_stab_sorted,xlab = "Links",ylab="% Change in structural stability",xaxt="n",pch=19,col=rev(colos))
-axis(1,at=1:length(links),labels=names(delta_stab_sorted),las=2,cex.axis=0.8)
-abline(h=0,lty=3)
+  plot(1:length(links),delta_stab_sorted,xlab = "Links",ylab="% Change in structural stability",xaxt="n",pch=19,col=rev(colos))
+  axis(1,at=1:length(links),labels=names(delta_stab_sorted),las=2,cex.axis=0.8)
+  abline(h=0,lty=3)
 dev.off()
 ```
+
+
+
 # Step 2:  number of extinctions following the removal of each interaction
-
-```{r}
-##For my data
-## I made it so that every record with a space (two name leps) is a 0 and those without a space (plant), is a 1
-BASAL_vector<-(!grepl(" ", network_lep2$resource))*1  ##The *1 turns it into numeric vector
-
-
-
-```
 
 ```{r}
 #... CREATE A Function to calculate the number of extinct species following the removal of interactions
@@ -278,26 +356,74 @@ nb.extinct = function(am,basal){
 
 #... Define the array to record the number of extinctions following one interaction removal
 #..........................................................................................
-nb_ext = numeric(length(links)) 
-names(nb_ext) = names.links
+nb_ext = numeric(length(plantnames)) 
+names(nb_ext) = plantnames
 
-ptm <- proc.time()
 
-#... Loop for link removals
+#... Loop for link removals (one interaction)
 #..........................
-for (j in 1:length(links)){
-  m2 = HOSTPLANTS
-  m2 [links_ij[j,1],links_ij[j,2]] = 0
-  nb_ext[j] = nb.extinct(m2,BASAL_vector)
-}
-proc.time() - ptm
+#for (j in 1:length(links)){
+#  m2 = BASAL
+#  m2 [links_ij[j,1],links_ij[j,2]] = 0
+##  nb_ext[j] = nb.extinct(m2,b)
+#}
+
+
+### TAKES ABOUT 8 MINUTES TO RUN OVER 900 PLANTS
+
+#... Loop for link removals (one plant genera)
+#..........................
+plantnames<-filter(network_lep2, !grepl(" ",resource)) %>%.$resource   ## Define a vector of plant names
+
+
+ptm <- proc.time() # start clock
+
+for (j in 1:length(plantnames)){    ### Loop through the plant list
+  plant= plantnames[j]              ## designate what plant
   
+  m2 = HOSTPLANTS                          ## new matrix
+  
+  for (k in 1:length(links)){                                    ## loop through the links
+     if  (grepl(plant,(rownames(links_ij)[k]), fixed=TRUE))                 ## If the row name has the plant....
+          m2 [links_ij[k,1],links_ij[k,2]] = 0                  ## Make all those links = 0
+  }
+  nb_ext[j] = nb.extinct(m2,BASAL)
+}
+  
+proc.time() - ptm # Stop the clock
+  
+
 #... Print the result
 #....................
 print(nb_ext)
 
 
+extinction_county<-data.frame(nb_ext) %>%
+      add_rownames("resource") %>%
+      mutate(rank = dense_rank(desc(nb_ext)))
 
+head(extinction_county)
+```
 
+Make a graph of the plants with the most extinctions
+```{r}
+library(ggplot2)
+
+woody<-mt_plants%>%select(genera,type) %>%group_by(genera,type) %>% summarise() %>%mutate(resource=tolower(genera))
+
+filter_extinction<-extinction_county %>%left_join(woody, by="resource") %>%
+  filter(type=="woody")%>%
+  mutate(rank_woody = dense_rank(desc(nb_ext))) %>%
+  filter(rank_woody<11) 
+
+g <- ggplot(filter_extinction, aes(x = reorder(resource, -nb_ext), y = nb_ext)) +
+         geom_bar(stat = "identity")
+
+g + theme_minimal()+
+  labs(x= "Woody Plant Genus", y="Number of Specialized Lepidoptera", 
+       title="Extinction risk for Jefferson Co., MT") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.title = element_text(hjust = 0.5)
+          )
 
 ```
