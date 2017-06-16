@@ -1,0 +1,303 @@
+---
+title: "network_analysis"
+author: "Desiree Narango"
+date: "June 4, 2017"
+output: html_document
+---
+
+<img src="C:/Users/dnarango/Desktop/picture/dowdy.jpg"alt="Alt text" style="width: 200px;"/>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## First, you need metric function from suave
+## The smaller the metric, the more resilient the network is
+
+First you need to calculate initial stability
+Then you need to calculate stability with plants removed
+
+First I need to important the interaction network for a county. Here we use a simple 0,1 network of host plant use
+
+```{r}
+##For montana
+
+#libraries
+library(stringr)
+library(tidyr)
+library(dplyr)
+
+
+## All montana plants for each county
+mt_plants<-read.csv("C:/Users/dnarango/Desktop/Kimberley LEPS/montana_plants.csv", na.strings=".") %>%
+  transform(MT_counties=str_split(MT_counties, ",")) %>%
+    unnest(MT_counties)
+
+##All montana leps for Jefferson county
+### Need to determine how to treat the weird genera
+mt_leps<-read.csv("C:/Users/dnarango/Desktop/Kimberley LEPS/jeffersonMT_leps.csv", na.strings=c("", "NA",".")) %>%
+  select(family,species,polyphagous,plant_host_genera,exotic) %>%
+  transform(plant_host_genera=str_split(plant_host_genera," ")) %>%
+    unnest(plant_host_genera) %>%
+    filter(nchar(plant_host_genera)>1) %>%
+    group_by(family, species, polyphagous ,exotic, plant_host_genera) %>%
+    summarise(total=n()) %>%
+    mutate(count=1)
+
+lep<-mt_leps %>%group_by(species)%>%summarise(n()) %>%select(species)%>% mutate(consumer=species, count=0) %>%rename(resource=species)
+
+plant<-mt_leps %>%group_by(plant_host_genera)%>%summarise(n()) %>%rename(species=plant_host_genera) %>% select(species)%>%mutate(consumer=species, count=0)%>%rename(resource=species)
+
+toadd<-rbind(plant, lep)
+
+
+##Convert to wide format for network analysis
+network_lep<-mt_leps %>% 
+  ungroup()%>%
+  select(-polyphagous, -total, -family, -exotic)%>%
+  select(plant_host_genera, species, count) %>%
+  rename(consumer=species) %>%
+  rename(resource=plant_host_genera) 
+
+toadd2<-data.frame(network_lep$consumer, network_lep$resource, count=0)%>%
+  rename(resource=network_lep.consumer, consumer=network_lep.resource)
+ 
+
+network_lep2<-network_lep %>%
+  rbind(toadd) %>%
+  rbind(toadd2) %>%
+  spread(consumer, count, fill=0) %>%
+  gather(consumer,value, 2:2414) %>%
+  #arrange(resource) %>%
+  spread(consumer, value) 
+
+
+rownames(network_lep2)<-network_lep2$resource 
+
+network_lep3<-network_lep2 %>%
+  select(-resource) %>%
+  t()
+
+```
+Script: code to rank interactions in an ecological network by their impact on structural stability
+......................................................................................................
+Supplementary information of for Harvey et al. (2016). Bridging ecology and conservation: a road map to ecological network protection. Journal of applied ecology.
+Script author: Isabelle Gounand, e-mail: isabelle.gounand@eawag.ch 
+Date: March 18, 2016
+
+References: 
+Sauve et al. 2016 Ecology 
+Neutel et al. 2002 Science, 2007 Nature
+Allesina and Tang 2012 Nature
+
+Example of a food web, using the community stability index as in Sauve et al. 2016 Ecology
+.......................................................................................................
+The community stability index represent the minimum intraspecific competition for the system to be stable (the smaller the more stable)
+This community stability index can be used if there is no cannibalism (only zero on the diagonal of the adjacency matrix)
+If there are some of these interactions, use directly the resilience as index of stability 
+(= real part of the dominant eigenvalue of the jacobian matrix): the more negative, the more resilient
+
+Analysis steps: 
+Step 1: Calculate the change in structural stability with the removal of each interaction separately
+Step 2: Calculate the number of extinctions following the removal of each interaction separately
+
+
+```{r}
+#... Load the stability functions (Online Supplementary material of Sauve et al. 2016 Ecology)
+#................................
+source("C:/Users/dnarango/Documents/Manuscripts/keystone plants/network analysis/suave_functions.R")
+
+
+#... Load data
+#.............
+#... Load the adjacency matrix
+# the adjacency matrix m is a square matrix of size S, with S the total number of species
+# undirected interactions (or bidirectional) are such that m_ij = m_ji = 1
+# directected interactions (such as antagonistic ones) are such that m_ij = 1 and m_ji = 0 if i feeds on j (j -> i)
+# i are the rows, with species in their role of consumer in antagonistic interactions
+# j are the columns, with species in their role of resource in antagonistic interactions
+m = as.matrix(read.csv("C:/Users/dnarango/Documents/Manuscripts/keystone plants/network analysis/test data/adjacency_matrix_foodweb.csv",h=T, row.names=1, sep=";"))
+s = nrow(m) # the number of species
+
+#### MY DATA
+HOSTPLANTS<-as.matrix(network_lep3)
+SPECIES=nrow(network_lep2)
+```
+
+Setting up the matrix, functions etc.
+```{r}
+#... Load the functional role of species basal (primary producers) or not
+# this is necessary to calculate robustess and secondary extinctions following removal of interactions
+# b is a array representing species in the same order than in the adjacency matrix
+# 1 is for basal species (persist without any resource), 0 for consumer (need an interaction with a resource to persist)   
+b = t(as.matrix(read.csv("C:/Users/dnarango/Documents/Manuscripts/keystone plants/network analysis/test data/basal_species_foodweb.csv",h=F, row.names=1, sep=";")))
+
+
+##Mydata
+##all plants are primary producers
+BASAL<-c(rep(0,nrow(lep)),rep(1,nrow(plant)))
+
+#... Variable to initiate the seeds (arbitrary positive integer)
+#..................................
+move_seed = 13000
+
+
+#... Define the Interaction links
+#................................
+links = which(HOSTPLANTS!=0) # continuous position in the matrix  (PUT IN INTERACTION MATRIX HERE)
+
+#... function to get the row - column coordinates from continuous positions in a matrix
+# x is the position
+# s is the size of the square matrix (number of species)
+# (PUT IN NUMBER OF SPECIES HERE)
+get_coordinates <-function(x){
+  row = ifelse(x%%SPECIES!=0,x%%SPECIES,SPECIES)
+  col = ifelse(x%%SPECIES!=0,trunc(x/SPECIES)+1,trunc(x/SPECIES))
+  return(c(row,col))
+}
+
+#... names of the links
+# (PUT IN MATRIX HERE)
+names.links = as.character(links)
+for(i in 1:length(links)) names.links [i] = paste(rownames(HOSTPLANTS)[get_coordinates(links[i])[1]],"->",colnames(HOSTPLANTS)[get_coordinates(links[i])[2]],sep="")
+
+#... Get the row - column coordinates of the links
+links_ij = t(sapply(links,FUN = get_coordinates))
+colnames(links_ij) = c("row","col")
+rownames(links_ij) = names.links
+
+```
+#Step 1:  Change in structural stability with the removal of each interaction
+## Calculate the initial stability index
+```{r}
+# the seed is set in order to keep the same set of interaction strength parameterization for each interaction removal
+# when only one interaction strength is changed
+nbiter = 10000  # number of iteration for random parameterization of interaction strengths (the higher the more accurate the final ranking of interactions)
+stab = numeric(nbiter) # array to record community stability index for each random parameterization
+
+ptm <- proc.time()
+#... Loop for random parameterizations of interaction strength
+for(i in 1:nbiter)
+{
+  #... Set a new (known) seed
+  set.seed(i+move_seed) 
+  
+  #... Parameterize the Jacobian matrix (function from Sauve et al. 2016's script)
+  # interaction strengths drawn from a normal distribution with mean 1 and sd 0.1
+  # m is the adjacency matrix with 0 and 1
+  J = jacobian_binary(m=HOSTPLANTS) 
+  
+  #... Calculate the community stability index (function from Sauve et al. 2016's script)
+  # s2 is an arbitrary number; if it is too low, then increase it
+  stab[i] = stability(J,s2 = 1) # 
+}
+
+#... Central metric of initial stability
+# median of the distribution of stability, calculate from many random parameterizations
+# THIS IS THE METRIC WE WANT
+stab_init = median(stab)
+stab_init
+
+proc.time() - ptm
+```
+
+#... Sequential interaction removal and effect on structural stability
+Now let's removes stuff and see what happens
+```{r}
+delta_stab <-numeric(length(links)) # array to record change in stability when an interaction is removed
+
+ptm <- proc.time() # start clock
+#... Loop for link removals
+#..........................
+for (j in 1:length(links)){
+  m2 = m
+  m2 [links_ij[j,1],links_ij[j,2]] = 0
+  stab_changed = numeric(nbiter) # array to record community stability indices when 1 interaction is removed
+  for(i in 1:nbiter)
+  {
+    set.seed(i+move_seed) # Set the same seeds as for initial stability calculation
+    J2 <- jacobian_binary(m=m2) # Parameterize the interaction strengths
+    stab_changed[i] <- stability(J2,1) # Calculate the community stability index
+  }
+  
+  #... change in average stability
+  # Percent of change compared to initial stability
+  # Negative numbers mean that stability decreases
+  
+  delta_stab[j] <- ((stab_init - median(stab_changed))/stab_init*100)
+}
+
+
+proc.time() - ptm # Stop the clock
+
+
+#... Rank the interactions depending on stability change
+#.......................................................
+names(delta_stab) <- names.links
+delta_stab_sorted <- sort(delta_stab,decreasing = T)
+
+
+#... Plot the stability change against ranked interactions
+#.........................................................
+colos = rainbow(length(links),start=0,end=0.35) # colors of the points: red (stability loss) to green (stability gain)
+pdf("Structural_stability_changes_seed13000_nbiter10000.pdf")
+plot(1:length(links),delta_stab_sorted,xlab = "Links",ylab="% Change in structural stability",xaxt="n",pch=19,col=rev(colos))
+axis(1,at=1:length(links),labels=names(delta_stab_sorted),las=2,cex.axis=0.8)
+abline(h=0,lty=3)
+dev.off()
+```
+# Step 2:  number of extinctions following the removal of each interaction
+
+```{r}
+##For my data
+## I made it so that every record with a space (two name leps) is a 0 and those without a space (plant), is a 1
+BASAL_vector<-(!grepl(" ", network_lep2$resource))*1  ##The *1 turns it into numeric vector
+
+
+
+```
+
+```{r}
+#... CREATE A Function to calculate the number of extinct species following the removal of interactions
+# am is the adjacency matrix, to which some links have been removed (1's turned into 0's)
+# basal is the array of species function where basal species are indicated by a 1 (otherwise 0)
+# the species have to be in the same order than in the square adjacency matrix (rows or columns)
+# basal species are those which doesn't need an interaction with a resource species to persist
+nb.extinct = function(am,basal){
+  am2 = am
+  basal2 = basal
+  is.extinct = function(x){res = ifelse(sum(x[-1])==0 & x[1]==0,1,0);return(res)} # function determining if a species in row is extinct
+  while(sum(apply(cbind(c(basal2),am2),1,is.extinct))!=0) # Loop until no more species is extinct
+  {
+    extinct = which(apply(cbind(c(basal2),am2),1,is.extinct)==1) # Positions of species extinct
+    am2 = am2[-extinct,-extinct] # removal of extinct species in the adjacency matrix
+    basal2 = basal2[-extinct] # removal of extinct species in the array of species function
+  }
+  return(length(basal) - nrow(am2)) # return the number of extinct species
+}
+
+#... Define the array to record the number of extinctions following one interaction removal
+#..........................................................................................
+nb_ext = numeric(length(links)) 
+names(nb_ext) = names.links
+
+ptm <- proc.time()
+
+#... Loop for link removals
+#..........................
+for (j in 1:length(links)){
+  m2 = HOSTPLANTS
+  m2 [links_ij[j,1],links_ij[j,2]] = 0
+  nb_ext[j] = nb.extinct(m2,BASAL_vector)
+}
+proc.time() - ptm
+  
+#... Print the result
+#....................
+print(nb_ext)
+
+
+
+
+
+```
